@@ -3,6 +3,7 @@ import logging
 import aiohttp
 from telegram.ext import Application, MessageHandler, filters, CommandHandler, ConversationHandler
 from aiogram import Bot, Dispatcher, types
+from aiogram.client.default import DefaultBotProperties
 from aiogram.types import ReplyKeyboardRemove, ReplyKeyboardMarkup, KeyboardButton
 
 BOT_TOKEN = '7116319751:AAGoO4z5EKLLt8cML5seEGlhBFNF7_5K6ow'
@@ -11,8 +12,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher(bot)
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties())
+dp = Dispatcher()
 
 
 async def help_command(update, context):
@@ -60,7 +61,7 @@ async def second_response(update, context):
     return ConversationHandler.END  # Константа, означающая конец диалога.
 
 
-@dp.message_handler(commands=['start'])
+@dp.message(commands=['start'])
 async def send_welcome(message: types.Message):
    kb = [
        [
@@ -107,8 +108,6 @@ def main():
     )
 
     application.add_handler(conv_handler)
-
-    application.add_handler(geo_dialog_handler())
     application.run_polling()
 
 
