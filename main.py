@@ -14,8 +14,11 @@ dp = Dispatcher()
 logger = logging.getLogger(__name__)
 
 
-async def help_command(update, context):
-    await update.message.reply_text("Этот бот может создавать .")
+@dp.message(Command("help"))
+async def help_command(message: types.Message):
+    await message.reply(
+        "Этот бот может создавать заметки-изображения.\n"
+        "Также, он может отправлять напоминания и выводить карту места по названию")
 
 
 @dp.message(Command("start"))
@@ -23,7 +26,7 @@ async def start(message: types.Message):
     kb = [
         [types.KeyboardButton(text="Создать заметку")],
         [types.KeyboardButton(text="Посмотреть заметки")],
-        [types.KeyboardButton(text="Посмотреть место")],
+        [types.KeyboardButton(text="Посмотреть карту места")],
         [types.KeyboardButton(text="Создать напоминание")]
     ]
     keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
@@ -31,8 +34,8 @@ async def start(message: types.Message):
 
 
 @dp.message(F.text.lower() == "создать заметку")
-async def with_puree(message: types.Message):
-    await message.reply("Отправьте изображение-заметку")
+async def create_note(message: types.Message, context):
+    await message.reply("Введите название заметки")
 
 
 @dp.message(F.text.lower() == "посмотреть заметки")
