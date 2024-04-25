@@ -1,9 +1,17 @@
 import logging
 import asyncio
+from telegram import ReplyKeyboardMarkup
+from telegram.ext import Application, MessageHandler, filters, ConversationHandler, CommandHandler
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters.command import Command
 from aiogram import F
 from aiogram.types import Message
+import aiohttp
+from sqlalchemy import Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine
+from sqlalchemy.orm import scoped_session, sessionmaker
+import os
 
 BOT_TOKEN = '7116319751:AAGoO4z5EKLLt8cML5seEGlhBFNF7_5K6ow'
 logging.basicConfig(
@@ -13,42 +21,95 @@ bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 logger = logging.getLogger(__name__)
 
+Base = declarative_base()
 
-@dp.message(Command("help"))
-async def help_command(message: types.Message):
-    await message.reply(
+
+class MediaIds(Base):
+    __tablename__ = 'Media ids'
+    id = Column(Integer, primary_key=True)
+    file_id = Column(String(255))
+    filename = Column(String(255))
+
+
+engine = create_engine(f'sqlite:///data.db')
+
+if not os.path.isfile(f'./data.db'):
+    Base.metadata.create_all(engine)
+
+session_factory = sessionmaker(bind=engine)
+Session = scoped_session(session_factory)
+
+
+async def help(update, context):
+    await update.message.reply_text(
         "Этот бот может создавать заметки-изображения.\n"
-        "Также, он может отправлять напоминания и выводить карту места по названию")
+        "Также, он может отправлять напоминания")
+    return ConversationHandler.END
 
 
-@dp.message(Command("start"))
-async def start(message: types.Message):
-    kb = [
-        [types.KeyboardButton(text="Создать заметку")],
-        [types.KeyboardButton(text="Посмотреть заметки")],
-        [types.KeyboardButton(text="Посмотреть карту места")],
-        [types.KeyboardButton(text="Создать напоминание")]
-    ]
-    keyboard = types.ReplyKeyboardMarkup(keyboard=kb)
-    await message.answer("Что Вы хотите сделать?", reply_markup=keyboard)
+async def stop(update, context):
+    await update.message.reply_text("Всего доброго!")
+    return ConversationHandler.END
 
 
-@dp.message(F.text.lower() == "создать заметку")
-async def create_note(message: types.Message, context):
-    await message.reply("Введите название заметки")
+async def start(update, context):
+    reply_keyboard = [['/address', '/phone'],
+                  ['/site', '/work_time']]
+    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+    await update.message.reply_text("Что Вы хотите сделать?", reply_markup=markup)
+    return 1
 
 
-@dp.message(F.text.lower() == "посмотреть заметки")
-async def without_puree(message: types.Message):
+async def get_name(update, context):
+    context['name'] = update.message.text
+    if context['state'] == 2:
+        await update.message.reply_text('Введите текст напоминания')
+    else:
+        await update.message.reply_text('Введите название файла')
+    return 2
+
+
+async def respond(update, context):
+    if context['state'] == 0:
+        await update.message.reply_text('Ф')
+
+
+'''
+async def upload_media_files(chat_id, folder, file):
+    folder_path = os.path.join(BASE_MEDIA_PATH, folder)
+    for filename in os.listdir(folder_path):
+        if filename.startswith('.'):
+            continue
+        logging.info(f'Started processing {filename}')
+        msg = await bot.send_photo(chat_id, update.message.photo[-1].file_id, disable_notification=True)
+        file_id = msg.photo[-1].file_id
+        session = Session()
+        newItem = MediaIds(file_id=file_id, filename=filename)
+        try:
+            session.add(newItem)
+            session.commit()
+        except Exception as e:
+            logging.error(
+                'Couldn\'t upload {}. Error is {}'.format(filename, e))
+        else:
+            logging.info(
+                f'Successfully uploaded and saved to DB file {filename} with id {file_id}')
+        finally:
+            session.close()
+'''
+
+
+async def view_notes(message: types.Message, context):
     await message.reply("Какую заметку вы бы хотели посмотреть?")
 
 
-@dp.message(F.text.lower() == "посмотреть место")
-async def place(message: types.Message):
-    await message.reply("Введите название места")
+async def get_response(url, params):
+    logger.info(f"getting {url}")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as resp:
+            return await resp.json()
 
 
-@dp.message(F.text.lower() == "создать напоминание")
 async def reminder(message: types.Message):
     await message.reply("Введите текст напоминания")
 
@@ -58,9 +119,23 @@ async def echo_gif(message: Message):
     await message.reply_photo(message.photo[-1].file_id)
 
 
-async def main():
-    await dp.start_polling(bot)
+conv_handler = ConversationHandler(
+    entry_points=[CommandHandler('start', start)],
+    states={
+        1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+        2: [MessageHandler(filters.TEXT & ~filters.COMMAND, respond)]
+    },
+    fallbacks=[CommandHandler('stop', stop)]
+)
+
+
+def main():
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("stop", stop))
+    application.add_handler(CommandHandler("help", help))
+    application.add_handler(CommandHandler("start", start))
+    application.run_polling()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

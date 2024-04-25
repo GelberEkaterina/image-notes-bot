@@ -1,0 +1,4 @@
+aiohttp==3.9.5
+telegram==0.0.1
+aiogram==3.4.1
+SQLAlchemy==2.0.29
