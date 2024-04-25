@@ -53,50 +53,35 @@ async def stop(update, context):
 
 
 async def start(update, context):
-    reply_keyboard = [['/address', '/phone'],
-                  ['/site', '/work_time']]
-    markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=False)
+    reply_keyboard = [['Создать заметку'],
+                      ['Открыть заметку', 'Создать напоминание']]
+    markup = ReplyKeyboardMarkup(reply_keyboard)
     await update.message.reply_text("Что Вы хотите сделать?", reply_markup=markup)
     return 1
 
 
 async def get_name(update, context):
-    context['name'] = update.message.text
-    if context['state'] == 2:
+    context.user_data['state'] = update.message.text
+    if context.user_data['state'] == 'Создать заметку':
+        await update.message.reply_text("Отправьте фотографию для заметки с её названием в подписи")
+    elif context.user_data['state'] == 'Открыть заметку':
+        await update.message.reply_text('Введите название файла')
+    elif context.user_data['state'] == 'Создать напоминание':
         await update.message.reply_text('Введите текст напоминания')
     else:
-        await update.message.reply_text('Введите название файла')
+        await update.message.reply_text('Выберите один из вариантов')
+        return 1
     return 2
 
 
 async def respond(update, context):
-    if context['state'] == 0:
+    if context.user_data['state'] == 'Создать заметку':
+        await update.message.reply_photo(update.message.photo[-1].file_id, caption=update.message.caption)
+    if context.user_data['state'] == 'Открыть заметку':
+        await update.message.reply_text()
+    if context.user_data['state'] == 'Создать напоминание':
         await update.message.reply_text('Ф')
-
-
-'''
-async def upload_media_files(chat_id, folder, file):
-    folder_path = os.path.join(BASE_MEDIA_PATH, folder)
-    for filename in os.listdir(folder_path):
-        if filename.startswith('.'):
-            continue
-        logging.info(f'Started processing {filename}')
-        msg = await bot.send_photo(chat_id, update.message.photo[-1].file_id, disable_notification=True)
-        file_id = msg.photo[-1].file_id
-        session = Session()
-        newItem = MediaIds(file_id=file_id, filename=filename)
-        try:
-            session.add(newItem)
-            session.commit()
-        except Exception as e:
-            logging.error(
-                'Couldn\'t upload {}. Error is {}'.format(filename, e))
-        else:
-            logging.info(
-                f'Successfully uploaded and saved to DB file {filename} with id {file_id}')
-        finally:
-            session.close()
-'''
+    return ConversationHandler.END
 
 
 async def view_notes(message: types.Message, context):
@@ -119,20 +104,19 @@ async def echo_gif(message: Message):
     await message.reply_photo(message.photo[-1].file_id)
 
 
-conv_handler = ConversationHandler(
-    entry_points=[CommandHandler('start', start)],
-    states={
-        1: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-        2: [MessageHandler(filters.TEXT & ~filters.COMMAND, respond)]
-    },
-    fallbacks=[CommandHandler('stop', stop)]
-)
-
-
 def main():
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("help", help))
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            1: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, get_name)],
+            2: [MessageHandler((filters.TEXT | filters.PHOTO) & ~filters.COMMAND, respond)]
+        },
+        fallbacks=[CommandHandler('stop', stop)]
+    )
+    application.add_handler(conv_handler)
     application.add_handler(CommandHandler("start", start))
     application.run_polling()
 
