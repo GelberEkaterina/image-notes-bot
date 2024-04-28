@@ -5,10 +5,11 @@ from telegram.ext import Application, MessageHandler, filters, ConversationHandl
 
 from aiogram import Bot, Dispatcher
 
-import sqlalchemy
 from sqlalchemy import create_engine, Column, Integer, String, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
+
+import aiohttp
 
 BOT_TOKEN = '7116319751:AAGoO4z5EKLLt8cML5seEGlhBFNF7_5K6ow'
 bot = Bot(BOT_TOKEN)
@@ -34,6 +35,34 @@ Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
 
 
+async def get_response(url, params):
+    logger.info(f"getting {url}")
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url, params=params) as resp:
+            return await resp.json()
+
+
+def get_ll_spn(toponym):
+    if not toponym:
+        return (None, None)
+
+    toponym_coordinates = toponym["Point"]["pos"]
+    toponym_longitude, toponym_lattitude = toponym_coordinates.split(" ")
+    ll = ",".join([toponym_longitude, toponym_lattitude])
+
+    envelope = toponym["boundedBy"]["Envelope"]
+
+    l, b = envelope["lowerCorner"].split(" ")
+    r, t = envelope["upperCorner"].split(" ")
+
+    dx = abs(float(l) - float(r)) / 2.0
+    dy = abs(float(t) - float(b)) / 2.0
+
+    span = f"{dx},{dy}"
+
+    return ll, span
+
+
 async def help(update, context):
     await update.message.reply_text(
         "Этот бот может создавать заметки-изображения.\n"
@@ -48,7 +77,8 @@ async def stop(update, context):
 
 async def start(update, context):
     reply_keyboard = [['Создать заметку', 'Список заметок'],
-                      ['Открыть заметку', 'Очистить заметки']]
+                      ['Открыть заметку', 'Очистить заметки'],
+                      ['Вывести карту']]
     markup = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
     await update.message.reply_text("Что Вы хотите сделать?", reply_markup=markup)
     return 1
@@ -90,8 +120,8 @@ async def get_name(update, context):
         session.close()
         return 1
 
-    elif context.user_data['state'] == 'Создать напоминание':
-        await update.message.reply_text('Введите текст напоминания')
+    elif context.user_data['state'] == 'Вывести карту':
+        await update.message.reply_text("Пришлите данные о географическом объекте, чтобы получить карту с координатами")
 
     else:
         await update.message.reply_text('Выберите один из вариантов')
@@ -120,11 +150,78 @@ async def respond(update, context):
         else:
             await update.message.reply_photo(note.photo_id)
 
-    elif context.user_data['state'] == 'Создать напоминание':
-        await update.message.reply_text('Ф')
+    elif context.user_data['state'] == 'Вывести карту':
+        geocoder_uri = "http://geocode-maps.yandex.ru/1.x/"
+        response = await get_response(geocoder_uri, params={
+            "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
+            "format": "json",
+            "geocode": update.message.text
+        })
+        try:
+            toponym = response["response"]["GeoObjectCollection"][
+                "featureMember"][0]["GeoObject"]
+            ll, spn = get_ll_spn(toponym)
+
+            static_api_request = f"http://static-maps.yandex.ru/1.x/?ll={ll}&spn={spn}&l=map"
+            await context.bot.send_photo(
+                update.message.chat_id,
+                static_api_request,
+                caption=f"Карта по вашему запросу: {update.message.text}"
+            )
+        except IndexError:
+            await update.message.reply_text('Место не найдено')
 
     session.close()
     return 1
+
+
+'''
+async def geocoder(update, context):
+    geocoder_uri = "http://geocode-maps.yandex.ru/1.x/"
+    response = await get_response(geocoder_uri, params={
+        "apikey": "40d1649f-0493-4b70-98ba-98533de7710b",
+        "format": "json",
+        "geocode": update.message.text
+    })
+
+    toponym = response["response"]["GeoObjectCollection"][
+        "featureMember"][0]["GeoObject"]
+    ll, spn = get_ll_spn(toponym)
+
+    static_api_request = f"http://static-maps.yandex.ru/1.x/?ll={ll}&spn={spn}&l=map"
+    await context.bot.send_photo(
+        update.message.chat_id,
+        static_api_request,
+        caption=f"Нашёл: {update.message.text}"
+    )
+    return ConversationHandler.END
+
+
+def get_ll_spn(toponym):
+    if not toponym:
+        return (None, None)
+
+    toponym_coordinates = toponym["Point"]["pos"]
+    toponym_longitude, toponym_lattitude = toponym_coordinates.split(" ")
+    ll = ",".join([toponym_longitude, toponym_lattitude])
+
+    envelope = toponym["boundedBy"]["Envelope"]
+
+    l, b = envelope["lowerCorner"].split(" ")
+    r, t = envelope["upperCorner"].split(" ")
+
+    dx = abs(float(l) - float(r)) / 2.0
+    dy = abs(float(t) - float(b)) / 2.0
+
+    span = f"{dx},{dy}"
+
+    return ll, span
+
+
+
+
+
+'''
 
 
 def main():
@@ -140,7 +237,6 @@ def main():
         fallbacks=[CommandHandler('stop', stop)]
     )
     application.add_handler(conv_handler)
-    application.add_handler(CommandHandler("start", start))
     application.run_polling()
 
 
