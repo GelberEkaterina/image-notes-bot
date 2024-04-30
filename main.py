@@ -3,8 +3,6 @@ import logging
 from telegram import ReplyKeyboardMarkup
 from telegram.ext import Application, MessageHandler, filters, ConversationHandler, CommandHandler
 
-from aiogram import Bot, Dispatcher
-
 from sqlalchemy import create_engine, Column, Integer, String, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -12,8 +10,6 @@ from sqlalchemy.ext.declarative import declarative_base
 import aiohttp
 
 BOT_TOKEN = '7116319751:AAGoO4z5EKLLt8cML5seEGlhBFNF7_5K6ow'
-bot = Bot(BOT_TOKEN)
-dp = Dispatcher()
 
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.DEBUG
@@ -182,7 +178,6 @@ async def respond(update, context):
 
 
 def main():
-
     application = Application.builder().token(BOT_TOKEN).build()
     application.add_handler(CommandHandler("stop", stop))
     application.add_handler(CommandHandler("help", help))
